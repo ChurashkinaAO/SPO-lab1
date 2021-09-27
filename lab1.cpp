@@ -1,147 +1,115 @@
-﻿//spo lab1
+//spo lab1
 
 #include <iostream>
 #include <stdio.h>
 #define WINVER 0x0A00
 #include <windows.h>
 
-#define BUFSIZE MAX_PATH
-#define FILESYSNAMEBUFSIZE MAX_PATH
-#define MAX_KEY_LENGTH 255
-
 using namespace std;
 
-#define INFO_BUFFER_SIZE 32767
-
-//p.2 Измерение производистельности ЦП, замер рабочей частоты f ЦП
-double PCFreq = 0.0;
-__int64 CounterStart = 0;
-
-
-void StartCounter()
+void Punct1()
 {
-	LARGE_INTEGER li;
-	if (!QueryPerformanceFrequency(&li))
-		cout << "Function QueryPerformanceFrequency() failed!\n";
+	OSVERSIONINFO osvi;
+	BOOL bIsWindowsXPorLater;
 
-	PCFreq = double(li.QuadPart);
+	ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
+	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 
-	printf("\nCPU frequency: %u  Hz\n", li);
-	QueryPerformanceCounter(&li);
-	CounterStart = li.QuadPart;
+	GetVersionEx(&osvi);
 }
 
-//подсчет количества таков ЦП, 
-//которое занимает выполнение программо1 пункта 1)
 
-
-double GetCounter()
-{
-	LARGE_INTEGER li;
-	QueryPerformanceCounter(&li);
-	return double((1000000 * (li.QuadPart - CounterStart)) / PCFreq);
-}
 
 int main()
 {
-	//p1.1. Версия ОС
-	DWORD dwVersion = 0;
-	DWORD dwMajorVersion = 0;
-	DWORD dwMinorVersion = 0;
-	DWORD dwBuild = 0;
+	//punct 1.1. Версия ОС
+	OSVERSIONINFO osvi;
+	BOOL bIsWindowsXPorLater;
 
-	dwVersion = GetVersion();
+	ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
+	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 
-	dwMajorVersion = (DWORD)(LOBYTE(LOWORD(dwVersion)));
-	dwMinorVersion = (DWORD)(HIBYTE(LOWORD(dwVersion)));
+	GetVersionEx(&osvi);
 
-	// номер сборки
+	cout << "Version of OS: " << osvi.dwMajorVersion << "." << osvi.dwMinorVersion << endl;
+	cout << "Build: " << osvi.dwBuildNumber << endl;
 
-	if (dwVersion < 0x80000000)
-		dwBuild = (DWORD)(HIWORD(dwVersion));
+	//punct 1.2
+	int INFO_BUFFER_SIZE = 256;
+	TCHAR infoBuf[INFO_BUFFER_SIZE];
+	DWORD  bufCharCount = INFO_BUFFER_SIZE;
+	GetSystemDirectoryA(infoBuf, INFO_BUFFER_SIZE);
+	printf("\nResult  GetSystemDirectory: %s\n", infoBuf);
 
-	printf("Version of OS is %d.%d (%d)\n",
-		dwMajorVersion,
-		dwMinorVersion,
-		dwBuild);
+	//punct 1.3
+	char lpBuffer[INFO_BUFFER_SIZE];
+	DWORD pcbBuffer = INFO_BUFFER_SIZE;
+	GetUserNameA(lpBuffer, &pcbBuffer);
+	printf("\nName of user : %s", lpBuffer);
+	GetComputerNameA(lpBuffer, &pcbBuffer);
+	printf("      Name of computer : %s", lpBuffer);
 
-	//p1.2
-	TCHAR szPath[_MAX_PATH] = { 0 };
-	UINT iRet = GetSystemDirectory(szPath, _MAX_PATH);
-	printf("Result  GetSystemDirectory %d\n", iRet);
+	//punct 1.4
+	char buffer[MAX_PATH * 4];
+	char PathName[MAX_PATH];
+	DWORD lpcchReturnLength = MAX_PATH * 4;
+	_ULARGE_INTEGER total, available, free;
 
-	//p1.3
-	char buffer[256];
-	DWORD size = 256;
-
-	GetComputerNameA(buffer, &size);
-	printf("Name of computer : %s\n", buffer);
-
-	GetUserNameA(buffer, &size);
-	printf("Name of user : %s\n", buffer);
-
-	//p1.4
-	char buffer2[MAX_PATH + 1];
-	DWORD size2 = MAX_PATH;
-	char buffer3[MAX_PATH + 1];
-	DWORD  CBufLen = MAX_PATH;
-	__int64 total, available, free;
-
-	HANDLE firstVolume = FindFirstVolumeA(buffer2, size2);
-	printf("\n      %s", buffer2);
+	HANDLE search = FindFirstVolumeA(buffer, sizeof(buffer));
+	printf("\n1.4");
 
 	do {
-		printf("\n%s", buffer2);
-		CBufLen = MAX_PATH;
-		GetVolumePathNamesForVolumeNameA(buffer2, buffer3, CBufLen, &CBufLen);
-		char* path = buffer3;
-		printf("\npath: %s", path);
-		GetDiskFreeSpaceExA(buffer2, (PULARGE_INTEGER)&available, (PULARGE_INTEGER)&total, (PULARGE_INTEGER)&free);
-		printf("\nsize : %I64d  bytes ", total);
-		printf("\nFree space : %I64d  bytes\n", available);
+		FindNextVolumeA(search, buffer, sizeof(buffer));
+		GetVolumePathNamesForVolumeNameA(buffer, PathName, sizeof(buffer), &lpcchReturnLength);
+		GetDiskFreeSpaceExA(buffer, &total, &available, &free);
+		printf("\nService Name: %s", buffer);
+		printf("\nPath Name: %s", PathName);
+		printf("\nDisk Available space: %llu\nVolume disk space: %llu\n", available.QuadPart, total.QuadPart);
 
+	} while (FindNextVolume(search, buffer, sizeof(buffer)));
 
-
-	} while (FindNextVolumeA(firstVolume, buffer2, BUFSIZE));
-	FindVolumeClose(firstVolume);
+	if (GetLastError() != ERROR_NO_MORE_FILES) {
+		printf("\nA system error has occurred");
+	}
+	FindVolumeClose(search);
 
 	//p1.5
-	DWORD dwSize;
-	TCHAR szName[MAX_KEY_LENGTH];
 	HKEY hKey;
-	DWORD dwIndex = 0;
-	DWORD retCode;
-	DWORD BufferSize = 8192;
-	PPERF_DATA_BLOCK PerfData = (PPERF_DATA_BLOCK)malloc(BufferSize);
-	DWORD cbData = BufferSize;
+	LPCSTR lpSubKey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+	DWORD  ulOptions;
+	REGSAM samDesired;
+	PHKEY  phkResult;
+	DWORD count = 0;
 
-	if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-		0, KEY_ALL_ACCESS, &hKey) == !ERROR_SUCCESS)
+	char Progbuffer[MAX_PATH * 4];
+	DWORD Pblen = 32767;
+
+	RegOpenKeyExA(HKEY_CURRENT_USER, lpSubKey, 0, KEY_ALL_ACCESS, &hKey);
+
+	while (RegEnumValueA(hKey, count, Progbuffer, &Pblen, 0, NULL, NULL, NULL) == ERROR_SUCCESS)
 	{
-		printf("Function RegOpenKeyEx() failed!\n");
-	}
-	else printf("\nStartup commands : \n");
-
-	while (1) {
-		dwSize = sizeof(szName);
-		retCode = RegEnumValue(hKey, dwIndex, szName, &dwSize, NULL, NULL, NULL, NULL);
-
-		if (retCode == ERROR_SUCCESS)
-		{
-			RegQueryValueExA(hKey, (LPCSTR)&szName, NULL, NULL, (LPBYTE)PerfData, &cbData);
-			printf("      %d: %s:  %s\n", dwIndex + 1, szName, PerfData);
-			dwIndex++;
-		}
-		else break;
+		RegEnumValueA(hKey, count, Progbuffer, &Pblen, 0, NULL, NULL, NULL);
+		printf("\n%s", Progbuffer);
+		count++;
 	}
 
 
-	//RegCloseKey(hKey);
-	
 
+	//punct 2.1
+	LARGE_INTEGER Freq;
+	QueryPerformanceFrequency(&Freq);
+	cout << "\nCPU frequency : " << Freq.QuadPart << " HZ";
 
-	//p2
-	StartCounter();
-	cout << "CPU clock count: " << GetCounter() << "  us \n";
+	//punct 2.2
+	LARGE_INTEGER t0, t;
+	QueryPerformanceCounter(&t0);
+	Punct1();
+	QueryPerformanceCounter(&t);
+	double ticks = t.QuadPart - t0.QuadPart;
+	double ticks_per_sec = Freq.QuadPart;
+	double usec_per_sec = 1e6;
+	double usec = usec_per_sec * ticks / ticks_per_sec;
+	printf("\nDuration point 1.1 complete=%f.3 usec\n", usec);
+
 	return 0;
 }
